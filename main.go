@@ -1,24 +1,23 @@
 package main
 
 import (
-	"fmt"
-	"time"
+	"encoding/json"
+	"net/http"
 )
 
-type Block struct {
-	Index     int
-	Previous  string
-	Timestamp int64
-	data      interface{}
-	hash      string
-}
-
-func generateNextBlock(blockData string) {
-	previousBlock := getltestBlock()
-	nextIndex := previousBlock.Index + 1
-	newxtTimestamp = time.Now()
-}
-
 func main() {
-	fmt.Print("======")
+	// http.HandleFunc("/", handler)
+	// const app = express();
+	// app.use(bodyParser.json());
+
+	http.HandleFunc("/blocks", blocksHandler)
+	http.HandleFunc("/mineBlock", blocksHandler)
+	http.HandleFunc("/peers", blocksHandler)
+	http.HandleFunc("/addPeer", blocksHandler)
+
+	http.ListenAndServe(":8080", nil)
+}
+
+func blocksHandler(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(GetBlockChain())
 }
