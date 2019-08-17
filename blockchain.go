@@ -24,7 +24,7 @@ func GenerageBlock(index int, previousHash string, timestamp int64, data interfa
 	}
 }
 
-func generateNextBlock(blockData string) *Block {
+func GenerateNextBlock(blockData string) *Block {
 	previousBlock := getLatestBlock()
 	nextIndex := previousBlock.Index + 1
 	nextTimestamp := time.Now()
