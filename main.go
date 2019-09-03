@@ -3,36 +3,42 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"net/http"
-
-	"github.com/gorilla/websocket"
 )
 
-var clients = make(map[*websocket.Conn]bool)
-var broadcast = make(chan Message)
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
+// var clients = make(map[*websocket.Conn]bool)
+// var broadcast = make(chan []byte)
+// var upgrader = websocket.Upgrader{
+// 	CheckOrigin: func(r *http.Request) bool {
+// 		return true
+// 	},
+// }
 
 func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "blockchain.html")
+	})
 	http.HandleFunc("/blocks", blocksHandler)
 	http.HandleFunc("/mineBlock", mineBlock)
-	http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
-		response = make([]string{}, len(clients))
-		i := 0
-		for ws, value := range clients {
-			if value == true {
-				response[i] = ws.RemoteAddr().String()
-				i += 1
-			}
-		}
-		json.NewEncoder(w).Encode(response)
-	})
+	// http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+	// 	response := make([]string{}, len(clients))
+	// 	i := 0
+	// 	for ws, value := range clients {
+	// 		if value == true {
+	// 			response[i] = ws.RemoteAddr().String()
+	// 			i += 1
+	// 		}
+	// 	}
+	// 	json.NewEncoder(w).Encode(response)
+	// })
+	hub := newHub()
+
+	go hub.run()
+
 	http.HandleFunc("/addPeer", blocksHandler)
-	http.HandleFunc("/ws", handleConnections)
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(hub, w, r)
+	})
 
 	http.ListenAndServe(":8080", nil)
 }
@@ -56,25 +62,26 @@ func mineBlock(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func handleConnections(w http.ResponseWriter, r *http.Request) {
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// ensure connection close when function returns
-	defer ws.Close()
-	clients[ws] = true
+// func handleConnections(w http.ResponseWriter, r *http.Request) {
+// 	serveWs(hub, w, r)
+// 	// ws, err := upgrader.Upgrade(w, r, nil)
+// 	// if err != nil {
+// 	// 	log.Fatal(err)
+// 	// }
+// 	// // ensure connection close when function returns
+// 	// defer ws.Close()
+// 	// clients[ws] = true
 
-	for {
-		var msg Message
-		// Read in a new message as JSON and map it to a Message object
-		err := ws.ReadJSON(&msg)
-		if err != nil {
-			log.Printf("error: %v", err)
-			delete(clients, ws)
-			break
-		}
-		// send the new message to the broadcast channel
-		broadcast <- msg
-	}
-}
+// 	// for {
+// 	// 	var msg Message
+// 	// 	// Read in a new message as JSON and map it to a Message object
+// 	// 	err := ws.ReadJSON(&msg)
+// 	// 	if err != nil {
+// 	// 		log.Printf("error: %v", err)
+// 	// 		delete(clients, ws)
+// 	// 		break
+// 	// 	}
+// 	// 	// send the new message to the broadcast channel
+// 	// 	broadcast <- msg
+// 	// }
+// }
