@@ -15,23 +15,24 @@ import (
 // }
 
 func main() {
+	hub := newHub()
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "blockchain.html")
 	})
 	http.HandleFunc("/blocks", blocksHandler)
 	http.HandleFunc("/mineBlock", mineBlock)
-	// http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
-	// 	response := make([]string{}, len(clients))
-	// 	i := 0
-	// 	for ws, value := range clients {
-	// 		if value == true {
-	// 			response[i] = ws.RemoteAddr().String()
-	// 			i += 1
-	// 		}
-	// 	}
-	// 	json.NewEncoder(w).Encode(response)
-	// })
-	hub := newHub()
+	http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+		response := make([]string, len(hub.clients))
+		var i = 0
+		for c, value := range hub.clients {
+			if value {
+				response[i] = c.conn.RemoteAddr().String()
+				i++
+			}
+		}
+		json.NewEncoder(w).Encode(response)
+	})
 
 	go hub.run()
 
@@ -61,27 +62,3 @@ func mineBlock(w http.ResponseWriter, r *http.Request) {
 	}
 
 }
-
-// func handleConnections(w http.ResponseWriter, r *http.Request) {
-// 	serveWs(hub, w, r)
-// 	// ws, err := upgrader.Upgrade(w, r, nil)
-// 	// if err != nil {
-// 	// 	log.Fatal(err)
-// 	// }
-// 	// // ensure connection close when function returns
-// 	// defer ws.Close()
-// 	// clients[ws] = true
-
-// 	// for {
-// 	// 	var msg Message
-// 	// 	// Read in a new message as JSON and map it to a Message object
-// 	// 	err := ws.ReadJSON(&msg)
-// 	// 	if err != nil {
-// 	// 		log.Printf("error: %v", err)
-// 	// 		delete(clients, ws)
-// 	// 		break
-// 	// 	}
-// 	// 	// send the new message to the broadcast channel
-// 	// 	broadcast <- msg
-// 	// }
-// }

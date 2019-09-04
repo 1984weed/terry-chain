@@ -45,6 +45,7 @@ type Client struct {
 	send chan []byte
 }
 
+// Message is a message
 type Message struct {
 	Type int         `json:"type"`
 	Data interface{} `json:"data,omitempty"`
@@ -75,8 +76,73 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		byte, _ := json.Marshal(message)
-		c.hub.broadcast <- byte
+		switch message.Type {
+		case queryLatest:
+			c.sendMesssage(Message{
+				Type: responseBlockchain,
+				Data: GetLatestBlock(),
+			})
+		case queryAll:
+			c.sendMesssage(Message{
+				Type: responseBlockchain,
+				Data: GetBlockChain(),
+			})
+		case responseBlockchain:
+			if message.Data == nil {
+				break
+			}
+		}
+
+		c.handleBlockchainResponse(message.Data.([]Block))
+	}
+}
+func responseLatestMsg() Message {
+	return Message{
+		Type: responseBlockchain,
+		Data: GetLatestBlock(),
+	}
+}
+
+func queryAllMsg() Message {
+	return Message{
+		Type: queryAll,
+		Data: nil,
+	}
+
+}
+func (c *Client) sendMesssage(message Message) {
+	byte, _ := json.Marshal(message)
+	c.send <- byte
+}
+func (c *Client) broadcast(message Message) {
+	byte, _ := json.Marshal(message)
+	c.hub.broadcast <- byte
+}
+
+func (c *Client) handleBlockchainResponse(receivedBlocks []Block) {
+	if len(receivedBlocks) == 0 {
+		fmt.Println("received block chain size of 0")
+		return
+	}
+	latestBlockReceived := receivedBlocks[len(receivedBlocks)-1]
+
+	latestBlockHeld := GetLatestBlock()
+
+	if latestBlockReceived.Index > latestBlockHeld.Index {
+		fmt.Println(fmt.Sprintf("blockchain possibly behind. We got: %#v Peer got: %#v", latestBlockReceived.Index, latestBlockReceived.Index))
+		if latestBlockHeld.Hash == latestBlockReceived.PreviousHash {
+			if addBlockToChain(latestBlockReceived) {
+				c.broadcast(responseLatestMsg())
+			}
+		} else if len(receivedBlocks) == 1 {
+			fmt.Println("We have to query the chain from our peer")
+			c.broadcast(queryAllMsg())
+		} else {
+			fmt.Println("Received blockchain is longer than current blockchain")
+			ReplaceChain(receivedBlocks)
+		}
+	} else {
+		fmt.Println("received blockchain is not longer than received blockchain. Do nothing")
 	}
 }
 
@@ -125,6 +191,12 @@ func (c *Client) writePump() {
 		}
 	}
 }
+
+const (
+	queryLatest        = 0
+	queryAll           = 1
+	responseBlockchain = 2
+)
 
 // serveWs handles websocket requests from the peer.
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {

@@ -3,57 +3,130 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
+	"math"
+	"strings"
 	"time"
 )
 
-type Block struct {
-	Index        int         `json:"index,omitempty"`
-	PreviousHash string      `json:"previousHash,omitempty"`
-	Timestamp    int64       `json:"timestamp,omitempty"`
-	Data         interface{} `json:"data,omitempty"`
-	Hash         string      `json:"hash,omitempty"`
+const (
+	// in seconds
+	blockGenerationInterval = 10
+	// in blocks
+	difficultyAdjustmentInterval = 10
+)
+
+func getDifficulty(aBlockChain []Block) int {
+	latestBlock := aBlockChain[len(aBlockChain)-1]
+	if latestBlock.Index%difficultyAdjustmentInterval == 0 && latestBlock.Index != 0 {
+		return getAdjustedDifficulty(latestBlock, aBlockChain)
+	}
+
+	return latestBlock.Difficulty
 }
 
-func GenerageBlock(index int, previousHash string, timestamp int64, data interface{}, hash string) *Block {
+func getAdjustedDifficulty(latestBlock Block, aBlockchain []Block) int {
+	prevAdjustmentBlock := aBlockchain[len(blockChain)-difficultyAdjustmentInterval]
+	timeExpected := int64(blockGenerationInterval * difficultyAdjustmentInterval)
+	timeTaken := latestBlock.Timestamp - prevAdjustmentBlock.Timestamp
+
+	if timeTaken < timeExpected/2 {
+		return prevAdjustmentBlock.Difficulty + 1
+	}
+	if timeTaken > timeExpected*2 {
+		return prevAdjustmentBlock.Difficulty - 1
+	}
+	return prevAdjustmentBlock.Difficulty
+}
+
+func getCurrentTimestamp() int64 {
+	now := time.Now()
+	return int64(math.Round(float64(now.Unix() / 1000)))
+}
+
+// Block is a one of chain
+type Block struct {
+	Index        int    `json:"index,omitempty"`
+	PreviousHash string `json:"previousHash,omitempty"`
+	Timestamp    int64  `json:"timestamp,omitempty"`
+	Data         string `json:"data,omitempty"`
+	Hash         string `json:"hash,omitempty"`
+	Difficulty   int    `json:"difficulty"`
+	Nonce        int    `json:"nonce"`
+}
+
+// GenerageBlock generates a Block by information
+func GenerageBlock(index int, previousHash string, timestamp int64, data string, hash string, difficulty int, nonce int) *Block {
 	return &Block{
 		Index:        index,
 		Hash:         hash,
 		PreviousHash: previousHash,
 		Timestamp:    timestamp,
 		Data:         data,
+		Difficulty:   difficulty,
+		Nonce:        nonce,
 	}
 }
 
+// GenerateNextBlock generates a next Block
 func GenerateNextBlock(blockData string) *Block {
-	previousBlock := getLatestBlock()
-	nextIndex := previousBlock.Index + 1
-	nextTimestamp := time.Now()
-	nextHash := calculateHash(nextIndex, previousBlock.Hash, nextTimestamp.Unix(), blockData)
+	previousBlock := GetLatestBlock()
+	difficulty := getDifficulty(GetBlockChain())
 
-	return &Block{
-		Index:        nextIndex,
-		Hash:         nextHash,
-		PreviousHash: previousBlock.Hash,
-		Timestamp:    nextTimestamp.Unix(),
-		Data:         blockData,
-	}
+	nextIndex := previousBlock.Index + 1
+	nextTimestamp := getCurrentTimestamp()
+	// nextHash := calculateHash(nextIndex, previousBlock.Hash, nextTimestamp, blockData)
+
+	newBlock := findBlock(nextIndex, previousBlock.Hash, nextTimestamp, blockData, difficulty)
+
+	addBlockToChain(*newBlock)
+
+	// Broadcast
+	return newBlock
 }
 
-func calculateHash(index int, prevHash string, nextTimestamp int64, blockData string) string {
+func findBlock(index int, previousHash string, timestamp int64, data string, difficulty int) *Block {
+	nonce := 0
+	for true {
+		hash := calculateHash(index, previousHash, timestamp, data, difficulty, nonce)
+		if hashMatchesDifficulty(hash, difficulty) {
+			return GenerageBlock(index, previousHash, timestamp, data, hash, difficulty, nonce)
+		}
+		nonce++
+	}
+	return nil
+}
+
+func getAccumulatedDifficulty(aBlockchain []Block) float64 {
+	result := float64(0)
+	for _, block := range aBlockchain {
+		result += math.Pow(2, float64(block.Difficulty))
+	}
+
+	return result
+}
+
+func calculateHash(index int, prevHash string, nextTimestamp int64, blockData string, difficulty, nonce int) string {
 	h := sha256.New()
 
-	s := fmt.Sprintf("%s%s%d%s", index, prevHash, nextTimestamp, blockData)
+	s := fmt.Sprintf("%d%s%d%s%d%d", index, prevHash, nextTimestamp, blockData, difficulty, nonce)
 	h.Write([]byte(s))
 
-	// This gets the finalized hash result as a byte
-	// slice. The argument to `Sum` can be used to append
-	// to an existing byte slice: it usually isn't needed.
 	bs := h.Sum(nil)
 
 	return string(bs)
 }
 
-var genesisBlock = GenerageBlock(0, "816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7", 1465154705, nil, "my genesis block!!")
+func hashMatchesDifficulty(hash string, difficulty int) bool {
+	hashInBinary := hexToBinary(hash)
+	requiredPrefix := ""
+	for i := 0; i < difficulty; i++ {
+		requiredPrefix += "0"
+	}
+
+	return strings.HasPrefix(hashInBinary, requiredPrefix) // true
+}
+
+var genesisBlock = GenerageBlock(0, "816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7", 1465154705, "", "my genesis block!!", 0, 0)
 var blockChain = []Block{*genesisBlock}
 
 func isValidNewBlock(newBlock Block, previousBlock Block) bool {
@@ -67,7 +140,8 @@ func isValidNewBlock(newBlock Block, previousBlock Block) bool {
 	return true
 }
 
-func replaceChain(newBlocks []Block) {
+// ReplaceChain handle whether to relace to new chain or ignore new chain
+func ReplaceChain(newBlocks []Block) {
 	if isValidChain(newBlocks) && len(newBlocks) > len(GetBlockChain()) {
 		blockChain = newBlocks
 		// broadcastLatest()
@@ -93,20 +167,22 @@ func isValidChain(blockchainToValidate []Block) bool {
 	return true
 }
 
+// GetBlockChain gets blockchain
 func GetBlockChain() []Block {
 	return blockChain
 }
 
-func getLatestBlock() Block {
+// GetLatestBlock gets the latest block in chain
+func GetLatestBlock() Block {
 	return blockChain[len(blockChain)-1]
 }
 
 func calculateHashForBlock(block Block) string {
-	return calculateHash(block.Index, block.PreviousHash, block.Timestamp, fmt.Sprintf("%v", block.Data))
+	return calculateHash(block.Index, block.PreviousHash, block.Timestamp, fmt.Sprintf("%v", block.Data), block.Difficulty, block.Nonce)
 }
 
 func addBlockToChain(newBlock Block) bool {
-	if isValidNewBlock(newBlock, getLatestBlock()) {
+	if isValidNewBlock(newBlock, GetLatestBlock()) {
 		blockChain = append(blockChain, newBlock)
 		return true
 	}

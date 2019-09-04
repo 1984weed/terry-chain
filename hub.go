@@ -1,11 +1,6 @@
 package main
 
-const (
-	QUERY_LATEST        = 0
-	QUERY_ALL           = 1
-	RESPONSE_BLOCKCHAIN = 2
-)
-
+// Hub can manage websocket channels
 type Hub struct {
 	// Registered clients.
 	clients map[*Client]bool
