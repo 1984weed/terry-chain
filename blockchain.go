@@ -74,7 +74,6 @@ func GenerateNextBlock(blockData string) *Block {
 
 	nextIndex := previousBlock.Index + 1
 	nextTimestamp := getCurrentTimestamp()
-	// nextHash := calculateHash(nextIndex, previousBlock.Hash, nextTimestamp, blockData)
 
 	newBlock := findBlock(nextIndex, previousBlock.Hash, nextTimestamp, blockData, difficulty)
 
@@ -103,6 +102,10 @@ func getAccumulatedDifficulty(aBlockchain []Block) float64 {
 	}
 
 	return result
+}
+
+func isValidTimestamp(newBlock Block, previousBlock Block) bool {
+	return (previousBlock.Timestamp-60 < newBlock.Timestamp) && newBlock.Timestamp-60 < getCurrentTimestamp()
 }
 
 func calculateHash(index int, prevHash string, nextTimestamp int64, blockData string, difficulty, nonce int) string {
