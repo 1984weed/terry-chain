@@ -18,8 +18,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
+
 	"math/big"
 )
 
@@ -96,6 +98,11 @@ func signTxIn(transaction Transaction, txInIndex int, privateKey string, aUnspen
 	signature = append(signature, s.Bytes()...)
 
 	return string(signature)
+}
+
+type Signature struct {
+	R *big.Int
+	S *big.Int
 }
 
 func ParseRsaPrivateKeyFromPemStr(privPEM string) (*ecdsa.PrivateKey, error) {
@@ -191,7 +198,7 @@ func validateTransaction(transaction Transaction, aUnspentTxOuts []UnspentTxOut)
 	hasValidTxIns := true
 
 	for _, t := range transaction.TxIns {
-		hasValidTxIns &= validateTxIn(t, transaction, aUnspentTxOuts)
+		hasValidTxIns = hasValidTxIns && validateTxIn(t, transaction, aUnspentTxOuts)
 	}
 
 	if hasValidTxIns {
@@ -202,21 +209,31 @@ func validateTransaction(transaction Transaction, aUnspentTxOuts []UnspentTxOut)
 }
 
 func validateTxIn(txIn TxIn, transaction Transaction, aUnspentTxOuts []UnspentTxOut) bool {
-	var referencedUTxOut UnspentTxOut
+	var referencedUTxOut *UnspentTxOut
 	for _, t := range aUnspentTxOuts {
 		if t.TxOutID == txIn.TxOutID && t.TxOutID == txIn.TxOutID {
-			referencedUTxOut = t
+			referencedUTxOut = &t
 		}
 	}
 
-	if t == nil {
+	if referencedUTxOut == nil {
 		return false
 	}
 
 	address := referencedUTxOut.Address
 
-	// const key = ec.keyFromPublic(address, 'hex');
-	// return key.verify(transaction.id, txIn.signature);
+	serializedPubKey, err := hex.DecodeString(address)
+	if err != nil {
+		return false
+	}
+	r, s := 
+
+	return ecdsa.Verify(serializedPubKey, transaction.ID, r, s)
+
+	// return NewAddressPubKey(serializedPubKey, defaultNet)
+
+	//     const key = ec.keyFromPublic(address, 'hex');
+	//     return key.verify(transaction.id, txIn.signature);
 }
 
 // const validateTxIn = (txIn: TxIn, transaction: Transaction, aUnspentTxOuts: UnspentTxOut[]): boolean => {
