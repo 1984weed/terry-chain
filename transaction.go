@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
+	"fmt"
 
 	"math/big"
 )
@@ -100,11 +101,6 @@ func signTxIn(transaction Transaction, txInIndex int, privateKey string, aUnspen
 	return string(signature)
 }
 
-type Signature struct {
-	R *big.Int
-	S *big.Int
-}
-
 func ParseRsaPrivateKeyFromPemStr(privPEM string) (*ecdsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(privPEM))
 	if block == nil {
@@ -117,22 +113,6 @@ func ParseRsaPrivateKeyFromPemStr(privPEM string) (*ecdsa.PrivateKey, error) {
 	}
 
 	return priv, nil
-}
-
-func ExportECDSAPrivateKeyAsPemStr(privkey *ecdsa.PrivateKey) string {
-	privkeyBytes, err := x509.MarshalECPrivateKey(privkey)
-
-	if err != nil {
-		return ""
-	}
-
-	privkeyPem := pem.EncodeToMemory(
-		&pem.Block{
-			Type:  "ECDSA PRIVATE KEY",
-			Bytes: privkeyBytes,
-		},
-	)
-	return string(privkeyPem)
 }
 
 func stringToBigInt(key string) *big.Int {
@@ -226,15 +206,179 @@ func validateTxIn(txIn TxIn, transaction Transaction, aUnspentTxOuts []UnspentTx
 	if err != nil {
 		return false
 	}
-	r, s := 
 
-	return ecdsa.Verify(serializedPubKey, transaction.ID, r, s)
+	publicKey, _ := ParsePubKey(serializedPubKey)
 
-	// return NewAddressPubKey(serializedPubKey, defaultNet)
+	sig, _ := parseSig([]byte(txIn.Signature))
 
-	//     const key = ec.keyFromPublic(address, 'hex');
-	//     return key.verify(transaction.id, txIn.signature);
+	return sig.Verify([]byte(transaction.ID), publicKey)
 }
+
+const COINBASE_AMOUNT = 50
+
+func validateCoinbaseTx(transaction Transaction, blockIndex int) bool {
+	if getTransactionID(transaction) != transaction.ID {
+		return false
+	}
+
+	if len(transaction.TxIns) != 1 {
+		return false
+	}
+
+	if transaction.TxIns[0].TxOutIndex != blockIndex {
+		return false
+	}
+
+	if len(transaction.TxOuts) != 1 {
+		return false
+	}
+	if transaction.TxOuts[0].Amount != COINBASE_AMOUNT {
+		return false
+	}
+
+	return true
+}
+func ProcessTransactions(aTransactions []Transaction, aUnspentTxOuts []UnspentTxOut, blockIndex int) []UnspentTxOut {
+	if !validateBlockTransactions(aTransactions, aUnspentTxOuts, blockIndex) {
+		fmt.Println("invalid block transactions")
+		return []UnspentTxOut{}
+	}
+	return updateUnspentTxOuts(aTransactions, aUnspentTxOuts)
+}
+
+func validateBlockTransactions(aTransactions []Transaction, aUnspentTxOuts []UnspentTxOut, blockIndex int) bool {
+	coinbaseTx := aTransactions[0]
+
+	if !validateCoinbaseTx(coinbaseTx, blockIndex) {
+		return false
+	}
+	txIns := []TxIn{}
+
+	for _, tx := range aTransactions {
+		for _, txIn := range tx.TxIns {
+			txIns = append(txIns, txIn)
+		}
+	}
+
+	if hasDuplicates(txIns) {
+		return false
+	}
+	normalTransaction := aTransactions[1:]
+	result := true
+	for _, tx := range normalTransaction {
+		result = result && validateTransaction(tx, aUnspentTxOuts)
+	}
+
+	return result
+}
+
+func hasDuplicates(txIns []TxIn) bool {
+	keyCountMap := make(map[string]int)
+
+	for _, txIn := range txIns {
+		key := txIn.TxOutID + txIn.TxOutID
+		if _, ok := keyCountMap[key]; ok {
+			return true
+		}
+		keyCountMap[key] = 1
+	}
+	return false
+}
+
+func getCoinBaseTransaction(address string, blockIndex int) Transaction {
+	t := Transaction{}
+	txIn := TxIn{
+		Signature:  "",
+		TxOutID:    "",
+		TxOutIndex: blockIndex,
+	}
+
+	t.TxIns = []TxIn{txIn}
+	t.TxOuts = []TxOut{TxOut{
+		Address: address,
+		Amount:  COINBASE_AMOUNT,
+	}}
+	t.ID = getTransactionID(t)
+
+	return t
+}
+
+func getPublicKey(aPrivateKey string) string {
+	ecdsaPrivateKey, err := ParseRsaPrivateKeyFromPemStr(aPrivateKey)
+
+	if err != nil {
+		return ""
+	}
+	publicKey := PublicKey(ecdsaPrivateKey.PublicKey)
+
+	return string(publicKey.SerializeUncompressed())
+}
+
+// const getPublicKey = (aPrivateKey: string): string => {
+//     return ec.keyFromPrivate(aPrivateKey, 'hex').getPublic().encode('hex');
+// };
+// ProcessTransactions, signTxIn, getTransactionId,
+// UnspentTxOut, TxIn, TxOut, getCoinbaseTransaction, getPublicKey,
+// Transaction
+
+// const validateCoinbaseTx = (transaction: Transaction, blockIndex: number): boolean => {
+//     if (transaction == null) {
+//         console.log('the first transaction in the block must be coinbase transaction');
+//         return false;
+//     }
+//     if (getTransactionId(transaction) !== transaction.id) {
+//         console.log('invalid coinbase tx id: ' + transaction.id);
+//         return false;
+//     }
+//     if (transaction.txIns.length !== 1) {
+//         console.log('one txIn must be specified in the coinbase transaction');
+//         return;
+//     }
+//     if (transaction.txIns[0].txOutIndex !== blockIndex) {
+//         console.log('the txIn signature in coinbase tx must be the block height');
+//         return false;
+//     }
+//     if (transaction.txOuts.length !== 1) {
+//         console.log('invalid number of txOuts in coinbase transaction');
+//         return false;
+//     }
+//     if (transaction.txOuts[0].amount != COINBASE_AMOUNT) {
+//         console.log('invalid coinbase amount in coinbase transaction');
+//         return false;
+//     }
+//     return true;
+// };
+
+// const validateTransaction = (transaction: Transaction, aUnspentTxOuts: UnspentTxOut[]): boolean => {
+
+//     if (getTransactionId(transaction) !== transaction.id) {
+//         console.log('invalid tx id: ' + transaction.id);
+//         return false;
+//     }
+//     const hasValidTxIns: boolean = transaction.txIns
+//         .map((txIn) => validateTxIn(txIn, transaction, aUnspentTxOuts))
+//         .reduce((a, b) => a && b, true);
+
+//     if (!hasValidTxIns) {
+//         console.log('some of the txIns are invalid in tx: ' + transaction.id);
+//         return false;
+//     }
+
+//     const totalTxInValues: number = transaction.txIns
+//         .map((txIn) => getTxInAmount(txIn, aUnspentTxOuts))
+//         .reduce((a, b) => (a + b), 0);
+
+//     const totalTxOutValues: number = transaction.txOuts
+//         .map((txOut) => txOut.amount)
+//         .reduce((a, b) => (a + b), 0);
+
+//     if (totalTxOutValues !== totalTxInValues) {
+//         console.log('totalTxOutValues !== totalTxInValues in tx: ' + transaction.id);
+//         return false;
+//     }
+
+//     return true;
+// };
 
 // const validateTxIn = (txIn: TxIn, transaction: Transaction, aUnspentTxOuts: UnspentTxOut[]): boolean => {
 //     const referencedUTxOut: UnspentTxOut =
