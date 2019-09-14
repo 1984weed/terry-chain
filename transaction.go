@@ -17,10 +17,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/hex"
-	"encoding/pem"
-	"errors"
 	"fmt"
 
 	"math/big"
@@ -93,26 +90,13 @@ func signTxIn(transaction Transaction, txInIndex int, privateKey string, aUnspen
 	if err != nil {
 		return ""
 	}
-	r, s, err := ecdsa.Sign(rand.Reader, ecdsaPrivateKey, hash[:])
+
+	r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(ecdsaPrivateKey), hash[:])
 
 	signature := r.Bytes()
 	signature = append(signature, s.Bytes()...)
 
 	return string(signature)
-}
-
-func ParseRsaPrivateKeyFromPemStr(privPEM string) (*ecdsa.PrivateKey, error) {
-	block, _ := pem.Decode([]byte(privPEM))
-	if block == nil {
-		return nil, errors.New("failed to parse PEM block containing the key")
-	}
-
-	priv, err := x509.ParseECPrivateKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return priv, nil
 }
 
 func stringToBigInt(key string) *big.Int {
