@@ -191,3 +191,40 @@ func addBlockToChain(newBlock Block) bool {
 	}
 	return false
 }
+
+// // the unspent txOut of genesis block is set to unspentTxOuts on startup
+var unspentTxOuts []UnspentTxOut = ProcessTransactions(blockchain[0].data, []UnspentTxOut{}, 0)
+
+// const getBlockchain = (): Block[] => blockchain;
+
+func getUnspentTxOuts() []UnspentTxOut {
+	b := append(unspentTxOuts[:0:0], unspentTxOuts...)
+	return b
+}
+
+// const getUnspentTxOuts = (): UnspentTxOut[] => _.cloneDeep(unspentTxOuts);
+
+func sendTransaction(address string, amount int) *Transaction {
+	wallet, err := GetPrivateFromWallet()
+
+	if err != nil {
+		return nil
+	}
+
+	tx, err := createTransaction(address, amount, wallet, getUnspentTxOuts(), getTransactionPool())
+
+	if err != nil {
+		return nil
+	}
+
+	addToTransactionPool(tx, getUnspentTxOuts())
+
+	return tx
+}
+
+// const sendTransaction = (address: string, amount: number): Transaction => {
+//     const tx: Transaction = createTransaction(address, amount, getPrivateFromWallet(), getUnspentTxOuts(), getTransactionPool());
+//     addToTransactionPool(tx, getUnspentTxOuts());
+//     broadCastTransactionPool();
+//     return tx;
+// };

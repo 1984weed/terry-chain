@@ -138,7 +138,7 @@ func createTxOuts(receiverAddress string, myAddress string, amount, leftOverAmou
 	return []TxOut{txOut1, leftOverTx}
 }
 
-func createTransaction(receiveAddress string, amount int, privateKey string, unspentTxOuts []UnspentTxOut) (*Transaction, error) {
+func createTransaction(receiveAddress string, amount int, privateKey string, unspentTxOuts []UnspentTxOut, txPool []Transaction) (*Transaction, error) {
 	myAddress := getPublicKey(privateKey)
 	myUnspentTxOuts := []UnspentTxOut{}
 	for _, utx := range unspentTxOuts {
@@ -153,7 +153,7 @@ func createTransaction(receiveAddress string, amount int, privateKey string, uns
 		return nil, err
 	}
 
-	toUnsignedTxIn := func(unspentTxOut UnspentTxOut) TxIt {
+	toUnsignedTxIn := func(unspentTxOut UnspentTxOut) TxIn {
 		return TxIn{
 			TxOutID:    unspentTxOut.TxOutID,
 			TxOutIndex: unspentTxOut.TxOutIndex,
