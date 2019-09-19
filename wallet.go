@@ -9,7 +9,7 @@ import (
 
 const privateKeyLocation = "./node/wallet/private_key"
 
-func GetPrivateFromWallet() (string, err) {
+func GetPrivateFromWallet() (string, error) {
 	f, err := os.Open(privateKeyLocation)
 	if err != nil {
 		return "", err

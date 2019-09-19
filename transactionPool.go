@@ -23,7 +23,7 @@ func addToTransactionPool(tx *Transaction, unspentTxOuts []UnspentTxOut) error {
 		return errors.New("Trying to add invalid tx to pool")
 	}
 
-	transactionPool := append(transactionPool, *tx)
+	transactionPool = append(transactionPool, *tx)
 
 	return nil
 }

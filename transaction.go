@@ -269,7 +269,7 @@ func hasDuplicates(txIns []TxIn) bool {
 	return false
 }
 
-func getCoinBaseTransaction(address string, blockIndex int) Transaction {
+func GetCoinBaseTransaction(address string, blockIndex int) Transaction {
 	t := Transaction{}
 	txIn := TxIn{
 		Signature:  "",

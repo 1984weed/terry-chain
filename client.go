@@ -85,7 +85,7 @@ func (c *Client) readPump() {
 		case queryAll:
 			c.sendMesssage(Message{
 				Type: responseBlockchain,
-				Data: GetBlockChain(),
+				Data: GetBlockchain(),
 			})
 		case responseBlockchain:
 			if message.Data == nil {

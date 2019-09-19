@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -15,17 +16,17 @@ const (
 	difficultyAdjustmentInterval = 10
 )
 
-func getDifficulty(aBlockChain []Block) int {
-	latestBlock := aBlockChain[len(aBlockChain)-1]
+func getDifficulty(aBlockchain []Block) int {
+	latestBlock := aBlockchain[len(aBlockchain)-1]
 	if latestBlock.Index%difficultyAdjustmentInterval == 0 && latestBlock.Index != 0 {
-		return getAdjustedDifficulty(latestBlock, aBlockChain)
+		return getAdjustedDifficulty(latestBlock, aBlockchain)
 	}
 
 	return latestBlock.Difficulty
 }
 
 func getAdjustedDifficulty(latestBlock Block, aBlockchain []Block) int {
-	prevAdjustmentBlock := aBlockchain[len(blockChain)-difficultyAdjustmentInterval]
+	prevAdjustmentBlock := aBlockchain[len(blockchain)-difficultyAdjustmentInterval]
 	timeExpected := int64(blockGenerationInterval * difficultyAdjustmentInterval)
 	timeTaken := latestBlock.Timestamp - prevAdjustmentBlock.Timestamp
 
@@ -45,17 +46,17 @@ func getCurrentTimestamp() int64 {
 
 // Block is a one of chain
 type Block struct {
-	Index        int    `json:"index,omitempty"`
-	PreviousHash string `json:"previousHash,omitempty"`
-	Timestamp    int64  `json:"timestamp,omitempty"`
-	Data         string `json:"data,omitempty"`
-	Hash         string `json:"hash,omitempty"`
-	Difficulty   int    `json:"difficulty"`
-	Nonce        int    `json:"nonce"`
+	Index        int           `json:"index,omitempty"`
+	PreviousHash string        `json:"previousHash,omitempty"`
+	Timestamp    int64         `json:"timestamp,omitempty"`
+	Data         []Transaction `json:"data,omitempty"`
+	Hash         string        `json:"hash,omitempty"`
+	Difficulty   int           `json:"difficulty"`
+	Nonce        int           `json:"nonce"`
 }
 
 // GenerageBlock generates a Block by information
-func GenerageBlock(index int, previousHash string, timestamp int64, data string, hash string, difficulty int, nonce int) *Block {
+func GenerageBlock(index int, previousHash string, timestamp int64, data []Transaction, hash string, difficulty int, nonce int) *Block {
 	return &Block{
 		Index:        index,
 		Hash:         hash,
@@ -68,22 +69,36 @@ func GenerageBlock(index int, previousHash string, timestamp int64, data string,
 }
 
 // GenerateNextBlock generates a next Block
-func GenerateNextBlock(blockData string) *Block {
+func GenerateNextBlock() *Block {
+	publicKey, err := GetPublicFromWallet()
+
+	if err != nil {
+		return nil
+	}
+
+	coinbaseTx := GetCoinBaseTransaction(publicKey, GetLatestBlock().Index+1)
+
+	blockData := append([]Transaction{coinbaseTx}, getTransactionPool()...)
+
+	return generateRawNextBlock(blockData)
+}
+
+func generateRawNextBlock(blockData []Transaction) *Block {
 	previousBlock := GetLatestBlock()
-	difficulty := getDifficulty(GetBlockChain())
+	difficulty := getDifficulty(GetBlockchain())
 
 	nextIndex := previousBlock.Index + 1
 	nextTimestamp := getCurrentTimestamp()
 
 	newBlock := findBlock(nextIndex, previousBlock.Hash, nextTimestamp, blockData, difficulty)
-
-	addBlockToChain(*newBlock)
-
-	// Broadcast
-	return newBlock
+	if addBlockToChain(*newBlock) {
+		// broadcastLatest()
+		return newBlock
+	}
+	return nil
 }
 
-func findBlock(index int, previousHash string, timestamp int64, data string, difficulty int) *Block {
+func findBlock(index int, previousHash string, timestamp int64, data []Transaction, difficulty int) *Block {
 	nonce := 0
 	for true {
 		hash := calculateHash(index, previousHash, timestamp, data, difficulty, nonce)
@@ -108,7 +123,7 @@ func isValidTimestamp(newBlock Block, previousBlock Block) bool {
 	return (previousBlock.Timestamp-60 < newBlock.Timestamp) && newBlock.Timestamp-60 < getCurrentTimestamp()
 }
 
-func calculateHash(index int, prevHash string, nextTimestamp int64, blockData string, difficulty, nonce int) string {
+func calculateHash(index int, prevHash string, nextTimestamp int64, blockData []Transaction, difficulty, nonce int) string {
 	h := sha256.New()
 
 	s := fmt.Sprintf("%d%s%d%s%d%d", index, prevHash, nextTimestamp, blockData, difficulty, nonce)
@@ -129,8 +144,21 @@ func hashMatchesDifficulty(hash string, difficulty int) bool {
 	return strings.HasPrefix(hashInBinary, requiredPrefix) // true
 }
 
-var genesisBlock = GenerageBlock(0, "816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7", 1465154705, "", "my genesis block!!", 0, 0)
-var blockChain = []Block{*genesisBlock}
+var genesisTransaction = []Transaction{Transaction{
+	TxIns: []TxIn{TxIn{
+		Signature:  "",
+		TxOutID:    "",
+		TxOutIndex: 0,
+	}},
+	TxOuts: []TxOut{TxOut{
+		Address: "04bfcab8722991ae774db48f934ca79cfb7dd991229153b9f732ba5334aafcd8e7266e47076996b55a14bf9913ee3145ce0cfc1372ada8ada74bd287450313534a",
+		Amount:  50,
+	}},
+	ID: "e655f6a5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3",
+}}
+
+var genesisBlock = GenerageBlock(0, "", 1465154705, genesisTransaction, "91a73664bc84c0baa1fc75ea6e4aa6d1d20c5df664c724e3159aefc2e1186627", 0, 0)
+var blockchain = []Block{*genesisBlock}
 
 func isValidNewBlock(newBlock Block, previousBlock Block) bool {
 	if previousBlock.Index+1 != newBlock.Index {
@@ -145,8 +173,8 @@ func isValidNewBlock(newBlock Block, previousBlock Block) bool {
 
 // ReplaceChain handle whether to relace to new chain or ignore new chain
 func ReplaceChain(newBlocks []Block) {
-	if isValidChain(newBlocks) && len(newBlocks) > len(GetBlockChain()) {
-		blockChain = newBlocks
+	if isValidChain(newBlocks) && len(newBlocks) > len(GetBlockchain()) {
+		blockchain = newBlocks
 		// broadcastLatest()
 	} else {
 		fmt.Println("Received blockchain invalid")
@@ -155,7 +183,7 @@ func ReplaceChain(newBlocks []Block) {
 
 func isValidChain(blockchainToValidate []Block) bool {
 	isValidGenesis := func(block Block) bool {
-		return block == *genesisBlock
+		return reflect.DeepEqual(block, *genesisBlock)
 	}
 
 	if !isValidGenesis(blockchainToValidate[0]) {
@@ -170,32 +198,30 @@ func isValidChain(blockchainToValidate []Block) bool {
 	return true
 }
 
-// GetBlockChain gets blockchain
-func GetBlockChain() []Block {
-	return blockChain
+// GetBlockchain gets blockchain
+func GetBlockchain() []Block {
+	return blockchain
 }
 
 // GetLatestBlock gets the latest block in chain
 func GetLatestBlock() Block {
-	return blockChain[len(blockChain)-1]
+	return blockchain[len(blockchain)-1]
 }
 
 func calculateHashForBlock(block Block) string {
-	return calculateHash(block.Index, block.PreviousHash, block.Timestamp, fmt.Sprintf("%v", block.Data), block.Difficulty, block.Nonce)
+	return calculateHash(block.Index, block.PreviousHash, block.Timestamp, block.Data, block.Difficulty, block.Nonce)
 }
 
 func addBlockToChain(newBlock Block) bool {
 	if isValidNewBlock(newBlock, GetLatestBlock()) {
-		blockChain = append(blockChain, newBlock)
+		blockchain = append(blockchain, newBlock)
 		return true
 	}
 	return false
 }
 
 // // the unspent txOut of genesis block is set to unspentTxOuts on startup
-var unspentTxOuts []UnspentTxOut = ProcessTransactions(blockchain[0].data, []UnspentTxOut{}, 0)
-
-// const getBlockchain = (): Block[] => blockchain;
+var unspentTxOuts []UnspentTxOut = ProcessTransactions(blockchain[0].Data, []UnspentTxOut{}, 0)
 
 func getUnspentTxOuts() []UnspentTxOut {
 	b := append(unspentTxOuts[:0:0], unspentTxOuts...)
